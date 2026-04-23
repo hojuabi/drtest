@@ -4,7 +4,7 @@ kind: Route
 metadata:
   name: regional-dr-test
 spec:
-  host: regional-dr-test.apps.drtbopp.ptt.gov.tr
+  host: regional-dr-test.apps.dc2managed.ptt.odine.lab
   to:
     kind: Service
     name: regional-dr-test
