@@ -1,0 +1,12 @@
+# ODF CephFS StorageClass for application workloads.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: regional-dr-test-cephfs
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+  storageClassName: ocs-storagecluster-cephfs

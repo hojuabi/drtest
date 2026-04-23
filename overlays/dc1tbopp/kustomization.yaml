@@ -1,0 +1,7 @@
+# Per-spoke: shared base + HTTPS Route for dc1tbopp apps domain.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+  - route.yaml

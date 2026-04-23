@@ -1,0 +1,118 @@
+# Images: registry.redhat.io only — no custom builds. Config + script via ConfigMaps.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: regional-dr-test
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: regional-dr-test
+  template:
+    metadata:
+      labels:
+        app: regional-dr-test
+    spec:
+      # No fsGroup: OpenShift restricted-v2 only allows groups from the namespace
+      # supplemental range; a fixed fsGroup (e.g. 1001) fails admission. Omit so SCC
+      # assigns a compatible UID/supplemental groups for shared PVC access between containers.
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      volumes:
+        - name: vol-rbd
+          persistentVolumeClaim:
+            claimName: regional-dr-test-rbd
+        - name: vol-cephfs
+          persistentVolumeClaim:
+            claimName: regional-dr-test-cephfs
+        - name: dash
+          configMap:
+            name: regional-dr-test-dashboard
+            items:
+              - key: index.html
+                path: index.html
+        - name: writer-cm
+          configMap:
+            name: regional-dr-test-writer
+            defaultMode: 0555
+            items:
+              - key: writer.sh
+                path: writer.sh
+        - name: httpd-extra
+          configMap:
+            name: regional-dr-test-httpd-extra
+            items:
+              - key: 99-dr-test.conf
+                path: 99-dr-test.conf
+      containers:
+        - name: httpd
+          image: registry.redhat.io/ubi9/httpd-24:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+              name: http
+              protocol: TCP
+          volumeMounts:
+            - name: vol-rbd
+              mountPath: /var/www/html/rbd
+            - name: vol-cephfs
+              mountPath: /var/www/html/cephfs
+            - name: dash
+              mountPath: /var/www/html/index.html
+              subPath: index.html
+            - name: httpd-extra
+              mountPath: /etc/httpd/conf.d/99-dr-test.conf
+              subPath: 99-dr-test.conf
+          readinessProbe:
+            httpGet:
+              path: /rbd/events.txt
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 256Mi
+        - name: writer
+          image: registry.redhat.io/ubi9/ubi-minimal:latest
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "/scripts/writer.sh"]
+          volumeMounts:
+            - name: vol-rbd
+              mountPath: /var/www/html/rbd
+            - name: vol-cephfs
+              mountPath: /var/www/html/cephfs
+            - name: writer-cm
+              mountPath: /scripts/writer.sh
+              subPath: writer.sh
+          livenessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - test -f /var/www/html/rbd/events.txt && test -f /var/www/html/cephfs/events.txt
+            initialDelaySeconds: 5
+            periodSeconds: 90
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 20m
+              memory: 32Mi
+            limits:
+              memory: 64Mi

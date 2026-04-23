@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Regional DR test — RBD + CephFS</title>
+  <meta http-equiv="cache-control" content="no-store" />
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 1.5rem; background: #f6f7f9; color: #1a1a1a; }
+    h1 { font-size: 1.25rem; }
+    .meta { color: #555; font-size: 0.9rem; margin-bottom: 1rem; }
+    table { border-collapse: collapse; width: 100%; max-width: 56rem; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+    th, td { border: 1px solid #ddd; padding: 0.35rem 0.5rem; text-align: left; font-size: 0.85rem; }
+    th { background: #eef1f6; }
+    tr:nth-child(even) { background: #fafafa; }
+    .panel { margin-bottom: 1.5rem; }
+    .err { color: #b00020; }
+  </style>
+</head>
+<body>
+  <h1>Regional DR test workload</h1>
+  <p class="meta">
+    Auto-refresh every 3s. Data files live on <strong>RBD</strong> and <strong>CephFS</strong> PVC-backed paths.
+    Images: <code>registry.redhat.io/ubi9/httpd-24</code> +
+    <code>registry.redhat.io/ubi9/ubi-minimal</code> — no custom builds.
+  </p>
+
+  <div class="panel">
+    <h2>RBD volume — <code>/rbd/events.txt</code></h2>
+    <div id="rbd-err" class="err"></div>
+    <table>
+      <thead><tr><th>#</th><th>Time (UTC)</th><th>Seq</th><th>Host</th><th>Raw</th></tr></thead>
+      <tbody id="rbd-body"></tbody>
+    </table>
+  </div>
+
+  <div class="panel">
+    <h2>CephFS volume — <code>/cephfs/events.txt</code></h2>
+    <div id="ceph-err" class="err"></div>
+    <table>
+      <thead><tr><th>#</th><th>Time (UTC)</th><th>Seq</th><th>Host</th><th>Raw</th></tr></thead>
+      <tbody id="ceph-body"></tbody>
+    </table>
+  </div>
+
+  <p class="meta">Last refresh: <span id="refreshed">—</span></p>
+
+  <script>
+    function parseLines(text) {
+      const rows = [];
+      text.split(/\r?\n/).forEach((line, idx) => {
+        const t = line.trim();
+        if (!t) return;
+        try {
+          const o = JSON.parse(t);
+          rows.push({ n: idx + 1, ts: o.ts || '', seq: o.seq ?? '', host: o.host || '', raw: t });
+        } catch (e) {
+          rows.push({ n: idx + 1, ts: '', seq: '', host: '', raw: t });
+        }
+      });
+      return rows.reverse();
+    }
+
+    function fillTable(tbodyId, rows) {
+      const tb = document.getElementById(tbodyId);
+      tb.innerHTML = '';
+      rows.forEach((r) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = '<td>' + r.n + '</td><td>' + (r.ts || '—') + '</td><td>' + (r.seq !== '' ? r.seq : '—') +
+          '</td><td>' + (r.host || '—') + '</td><td><code>' + (r.raw || '').replace(/</g, '&lt;') + '</code></td>';
+        tb.appendChild(tr);
+      });
+    }
+
+    async function load() {
+      document.getElementById('refreshed').textContent = new Date().toISOString();
+      for (const [url, errId, bodyId] of [
+        ['/rbd/events.txt', 'rbd-err', 'rbd-body'],
+        ['/cephfs/events.txt', 'ceph-err', 'ceph-body'],
+      ]) {
+        const errEl = document.getElementById(errId);
+        errEl.textContent = '';
+        try {
+          const res = await fetch(url, { cache: 'no-store' });
+          if (!res.ok) throw new Error(res.status + ' ' + res.statusText);
+          const text = await res.text();
+          fillTable(bodyId, parseLines(text));
+        } catch (e) {
+          errEl.textContent = String(e);
+        }
+      }
+    }
+
+    load();
+    setInterval(load, 3000);
+  </script>
+</body>
+</html>

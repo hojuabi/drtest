@@ -1,0 +1,6 @@
+# Default: primary spoke (dc1tbopp) — matches regional-dr-test-pull ApplicationSet. Optional DR-site Route: overlays/drtbopp.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - overlays/dc1tbopp

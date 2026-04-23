@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: regional-dr-test
+spec:
+  selector:
+    app: regional-dr-test
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+      protocol: TCP
